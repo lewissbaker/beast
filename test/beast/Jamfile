@@ -15,6 +15,7 @@ alias run-tests :
     [ compile zlib.cpp ]
     core//run-tests
     http//run-tests
+    uri//run-tests
     websocket//run-tests
     zlib//run-tests
     ;
@@ -22,6 +23,7 @@ alias run-tests :
 alias fat-tests :
     core//fat-tests
     http//fat-tests
+    uri//fat-tests
     websocket//fat-tests
     zlib//fat-tests
     ;
