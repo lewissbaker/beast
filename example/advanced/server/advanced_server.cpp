@@ -414,7 +414,7 @@ public:
             return;
 
         if(ec)
-            fail(ec, "read");
+            return fail(ec, "read");
 
         // Note that there is activity
         activity();

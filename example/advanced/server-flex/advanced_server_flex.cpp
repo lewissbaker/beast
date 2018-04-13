@@ -29,6 +29,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/make_unique.hpp>
 #include <boost/config.hpp>
+#include <boost/logic/tribool.hpp>
 #include <algorithm>
 #include <cstdlib>
 #include <functional>
@@ -215,15 +216,6 @@ handle_request(
 
 //------------------------------------------------------------------------------
 
-// Report a failure
-void
-fail(boost::system::error_code ec, char const* what)
-{
-    std::cerr << what << ": " << ec.message() << "\n";
-}
-
-//------------------------------------------------------------------------------
-
 // Echoes back all received WebSocket messages.
 // This uses the Curiously Recurring Template Pattern so that
 // the same code works with both SSL streams and regular sockets.
@@ -239,12 +231,28 @@ class websocket_session
     }
 
     boost::beast::multi_buffer buffer_;
-    char ping_state_ = 0;
+    bool activity_ = false;
+
+    // false         == No ping has been sent
+    // indeterminate == ping sent but no completion
+    // true          == ping was sent and got completion
+    boost::tribool ping_ = false;
 
 protected:
     boost::asio::strand<
         boost::asio::io_context::executor_type> strand_;
     boost::asio::steady_timer timer_;
+
+    // Report a failure
+    void
+    fail(boost::system::error_code ec, char const* what)
+    {
+        std::cerr << what << ": " << ec.message() << "\n";
+
+        // Cancel the timer if it is active. Any pending wait will
+        // complete with the error boost::asio::operation_aborted.
+        timer_.cancel();
+    }
 
 public:
     // Construct the session
@@ -270,8 +278,19 @@ public:
                 std::placeholders::_1,
                 std::placeholders::_2));
 
-        // Set the timer
+        // Set the timer and wait
         timer_.expires_after(std::chrono::seconds(15));
+        timer_.async_wait(
+            boost::asio::bind_executor(
+                strand_,
+                std::bind(
+                    &websocket_session::on_timer,
+                    derived().shared_from_this(),
+                    std::placeholders::_1)));
+
+        // The handshake will count as a sent ping for the
+        // purpose of determining if the connection timed out.
+        ping_ = true;
 
         // Accept the websocket handshake
         derived().ws().async_accept(
@@ -294,6 +313,9 @@ public:
         if(ec)
             return fail(ec, "accept");
 
+        // Clear the flag so we can send a ping again if needed.
+        ping_ = true;
+
         // Read a message
         do_read();
     }
@@ -305,40 +327,41 @@ public:
         if(ec && ec != boost::asio::error::operation_aborted)
             return fail(ec, "timer");
 
-        // See if the timer really expired since the deadline may have moved.
-        if(timer_.expiry() <= std::chrono::steady_clock::now())
+        // See if there has been recent activity
+        if(! activity_)
         {
-            // If this is the first time the timer expired,
-            // send a ping to see if the other end is there.
-            if(derived().ws().is_open() && ping_state_ == 0)
+            if(ping_ != false)
             {
-                // Note that we are sending a ping
-                ping_state_ = 1;
-
-                // Set the timer
-                timer_.expires_after(std::chrono::seconds(15));
-
-                // Now send the ping
-                derived().ws().async_ping({},
-                    boost::asio::bind_executor(
-                        strand_,
-                        std::bind(
-                            &websocket_session::on_ping,
-                            derived().shared_from_this(),
-                            std::placeholders::_1)));
+                // No activity, no response to ping.
+                // The connection has timed out.
+                return derived().do_timeout();
             }
-            else
-            {
-                // The timer expired while trying to handshake,
-                // or we sent a ping and it never completed or
-                // we never got back a control frame, so close.
 
-                derived().do_timeout();
-                return;
-            }
+            // Send a ping
+            ping_ = boost::indeterminate;
+            derived().ws().async_ping({},
+                boost::asio::bind_executor(
+                    strand_,
+                    std::bind(
+                        &websocket_session::on_ping,
+                        derived().shared_from_this(),
+                        std::placeholders::_1)));
+        }
+        else
+        {
+            // Clear the activity flag. If it doesn't get
+            // set to true when the timer expires, then
+            // the connection has timed out.
+            activity_ = false;
+
+            // If we completed sending a ping, clear the
+            // flag so we can send a ping again if needed.
+            if(ping_)
+                ping_ = false;
         }
 
-        // Wait on the timer
+        // Set the timer and wait
+        timer_.expires_after(std::chrono::seconds(15));
         timer_.async_wait(
             boost::asio::bind_executor(
                 strand_,
@@ -346,17 +369,6 @@ public:
                     &websocket_session::on_timer,
                     derived().shared_from_this(),
                     std::placeholders::_1)));
-    }
-
-    // Called to indicate activity from the remote peer
-    void
-    activity()
-    {
-        // Note that the connection is alive
-        ping_state_ = 0;
-
-        // Set the timer
-        timer_.expires_after(std::chrono::seconds(15));
     }
 
     // Called after a ping is sent.
@@ -370,20 +382,12 @@ public:
         if(ec)
             return fail(ec, "ping");
 
-        // Note that the ping was sent.
-        if(ping_state_ == 1)
-        {
-            ping_state_ = 2;
-        }
-        else
-        {
-            // ping_state_ could have been set to 0
-            // if an incoming control frame was received
-            // at exactly the same time we sent a ping.
-            BOOST_ASSERT(ping_state_ == 0);
-        }
+        // Note that the ping was sent
+        BOOST_ASSERT(boost::indeterminate(ping_));
+        ping_ = true;
     }
 
+    // Called when a control frame is received
     void
     on_control_callback(
         websocket::frame_type kind,
@@ -391,8 +395,8 @@ public:
     {
         boost::ignore_unused(kind, payload);
 
-        // Note that there is activity
-        activity();
+        // Indicate recent activity, otherwise the connection will be timed out
+        activity_ = true;
     }
 
     void
@@ -426,10 +430,10 @@ public:
             return;
 
         if(ec)
-            fail(ec, "read");
+            return fail(ec, "read");
 
-        // Note that there is activity
-        activity();
+        // Indicate recent activity, otherwise the connection will be timed out
+        activity_ = true;
 
         // Echo the message
         derived().ws().text(derived().ws().got_text());
@@ -765,6 +769,19 @@ protected:
     boost::asio::strand<
         boost::asio::io_context::executor_type> strand_;
     boost::beast::flat_buffer buffer_;
+    bool activity_ = false;
+
+    // Report a failure
+    void
+    fail(boost::system::error_code ec, char const* what)
+    {
+        std::cerr << what << ": " << ec.message() << "\n";
+
+        // Cancel the timer if it is active. Any pending wait will
+        // complete with the error boost::asio::operation_aborted.
+        timer_.cancel();
+
+    }
 
 public:
     // Construct the session
@@ -781,12 +798,62 @@ public:
     {
     }
 
+    // Called when the timer expires.
+    void
+    start_timer()
+    {
+        // Set the expiration time
+        timer_.expires_after(std::chrono::seconds(15));
+
+        // Wait on the timer
+        timer_.async_wait(
+            boost::asio::bind_executor(
+                strand_,
+                std::bind(
+                    &http_session::on_timer,
+                    derived().shared_from_this(),
+                    std::placeholders::_1)));
+    }
+
+    // Called when the timer expires.
+    void
+    on_timer(boost::system::error_code ec)
+    {
+        // Happens when we cancel the timer
+        if(ec == boost::asio::error::operation_aborted)
+            return;
+
+        if(ec)
+            return fail(ec, "timer");
+
+        // If there was activity then set the timer again
+        if(activity_)
+        {
+            activity_ = false;
+
+            // Set the expiration time
+            timer_.expires_after(std::chrono::seconds(15));
+
+            // Wait on the timer again
+            return timer_.async_wait(
+                boost::asio::bind_executor(
+                    strand_,
+                    std::bind(
+                        &http_session::on_timer,
+                        derived().shared_from_this(),
+                        std::placeholders::_1)));
+        }
+
+        // If activity_ is `false` it means that we did not receive
+        // an HTTP request in the last 3 seconds. The derived class
+        // class handles the timeout because the behavior is a little
+        // bit different for SSL than it is for plain sessions.
+        derived().do_timeout();
+    }
+
     void
     do_read()
     {
-        // Set the timer
-        timer_.expires_after(std::chrono::seconds(15));
-
         // Make the request empty before reading,
         // otherwise the operation behavior is undefined.
         req_ = {};
@@ -803,50 +870,34 @@ public:
                     derived().shared_from_this(),
                     std::placeholders::_1)));
     }
-
-    // Called when the timer expires.
-    void
-    on_timer(boost::system::error_code ec)
-    {
-        if(ec && ec != boost::asio::error::operation_aborted)
-            return fail(ec, "timer");
-
-        // Verify that the timer really expired since the deadline may have moved.
-        if(timer_.expiry() <= std::chrono::steady_clock::now())
-            return derived().do_timeout();
-
-        // Wait on the timer
-        timer_.async_wait(
-            boost::asio::bind_executor(
-                strand_,
-                std::bind(
-                    &http_session::on_timer,
-                    derived().shared_from_this(),
-                    std::placeholders::_1)));
-    }
-
     void
     on_read(boost::system::error_code ec)
     {
-        // Happens when the timer closes the socket
+        // Happens when we close the socket on a timeout
         if(ec == boost::asio::error::operation_aborted)
             return;
 
-        // This means they closed the connection
+        // This means the other end closed the connection
         if(ec == http::error::end_of_stream)
             return derived().do_eof();
 
         if(ec)
             return fail(ec, "read");
 
-        // See if it is a WebSocket Upgrade
+        // See if we got a WebSocket Upgrade
         if(websocket::is_upgrade(req_))
         {
+            // Cancel the timer first
+            timer_.cancel();
+
             // Transfer the stream to a new WebSocket session
             return make_websocket_session(
                 derived().release_stream(),
                 std::move(req_));
         }
+
+        // Note that we have detected activity
+        activity_ = true;
 
         // Send the response
         handle_request(doc_root_, std::move(req_), queue_);
@@ -859,7 +910,7 @@ public:
     void
     on_write(boost::system::error_code ec, bool close)
     {
-        // Happens when the timer closes the socket
+        // Happens when we close the socket on a timeout
         if(ec == boost::asio::error::operation_aborted)
             return;
 
@@ -933,16 +984,19 @@ public:
                         &plain_http_session::run,
                         shared_from_this())));
 
-        // Run the timer. The timer is operated
-        // continuously, this simplifies the code.
-        on_timer({});
+        // Run the timer
+        start_timer();
 
+        // Read the first request
         do_read();
     }
 
     void
     do_eof()
     {
+        // Cancel the timer
+        timer_.cancel();
+
         // Send a TCP shutdown
         boost::system::error_code ec;
         socket_.shutdown(tcp::socket::shutdown_send, ec);
@@ -953,6 +1007,8 @@ public:
     void
     do_timeout()
     {
+        std::cerr << "Connection timed out" << std::endl;
+
         // Closing the socket cancels all outstanding operations. They
         // will complete with boost::asio::error::operation_aborted
         boost::system::error_code ec;
@@ -1014,12 +1070,8 @@ public:
                         &ssl_http_session::run,
                         shared_from_this())));
 
-        // Run the timer. The timer is operated
-        // continuously, this simplifies the code.
-        on_timer({});
-
-        // Set the timer
-        timer_.expires_after(std::chrono::seconds(15));
+        // Run the timer
+        start_timer();
 
         // Perform the SSL handshake
         // Note, this is the buffered version of the handshake.
@@ -1048,6 +1100,9 @@ public:
 
         // Consume the portion of the buffer used by the handshake
         buffer_.consume(bytes_used);
+
+        // Note that we have detected activity
+        activity_ = true;
 
         do_read();
     }
@@ -1088,12 +1143,14 @@ public:
     {
         // If this is true it means we timed out performing the shutdown
         if(eof_)
+        {
+            std::cerr << "Connection timed out" << std::endl;
             return;
+        }
 
-        // Start the timer again
-        timer_.expires_at(
-            (std::chrono::steady_clock::time_point::max)());
-        on_timer({});
+        // We timed out waiting for another HTTP request, so
+        // perform the SSL shutdown handshake.
+        start_timer();
         do_eof();
     }
 };
@@ -1109,6 +1166,13 @@ class detect_session : public std::enable_shared_from_this<detect_session>
         boost::asio::io_context::executor_type> strand_;
     std::string const& doc_root_;
     boost::beast::flat_buffer buffer_;
+
+    // Report a failure
+    void
+    fail(boost::system::error_code ec, char const* what)
+    {
+        std::cerr << what << ": " << ec.message() << "\n";
+    }
 
 public:
     explicit
@@ -1173,6 +1237,13 @@ class listener : public std::enable_shared_from_this<listener>
     tcp::socket socket_;
     std::string const& doc_root_;
 
+    // Report a failure
+    void
+    fail(boost::system::error_code ec, char const* what)
+    {
+        std::cerr << what << ": " << ec.message() << "\n";
+    }
+
 public:
     listener(
         boost::asio::io_context& ioc,
@@ -1195,7 +1266,7 @@ public:
         }
 
         // Allow address reuse
-        acceptor_.set_option(boost::asio::socket_base::reuse_address(true));
+        acceptor_.set_option(boost::asio::socket_base::reuse_address(true), ec);
         if(ec)
         {
             fail(ec, "set_option");
