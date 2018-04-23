@@ -234,8 +234,8 @@ class websocket_session
     bool activity_ = false;
 
     // false         == No ping has been sent
-    // indeterminate == ping sent but no completion
-    // true          == ping was sent and got completion
+    // indeterminate == Ping sent but no completion
+    // true          == Ping sent, got completion
     boost::tribool ping_ = false;
 
 protected:
@@ -264,7 +264,7 @@ public:
     {
     }
 
-    // Start the asynchronous operation
+    // Try to accept the WebSocket Upgrade request and send back a response
     template<class Body, class Allocator>
     void
     do_accept(http::request<Body, http::basic_fields<Allocator>> req)
@@ -288,8 +288,8 @@ public:
                     derived().shared_from_this(),
                     std::placeholders::_1)));
 
-        // The handshake will count as a sent ping for the
-        // purpose of determining if the connection timed out.
+        // The handshake will count as a sent ping for the purpose of determining if the connection timed out,
+        // this is to prevent sending a ping before the handshake is finished (which would be illegal).
         ping_ = true;
 
         // Accept the websocket handshake
@@ -313,8 +313,8 @@ public:
         if(ec)
             return fail(ec, "accept");
 
-        // Clear the flag so we can send a ping again if needed.
-        ping_ = true;
+        // Clear the flag so we can send a ping again if needed
+        ping_ = false;
 
         // Read a message
         do_read();
@@ -500,10 +500,6 @@ public:
     void
     run(http::request<Body, http::basic_fields<Allocator>> req)
     {
-        // Run the timer. The timer is operated
-        // continuously, this simplifies the code.
-        on_timer({});
-
         // Accept the WebSocket upgrade request
         do_accept(std::move(req));
     }
@@ -802,10 +798,7 @@ public:
     void
     start_timer()
     {
-        // Set the expiration time
-        timer_.expires_after(std::chrono::seconds(15));
-
-        // Wait on the timer
+        // Set the timer and wait
         timer_.async_wait(
             boost::asio::bind_executor(
                 strand_,
