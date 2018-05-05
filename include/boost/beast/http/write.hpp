@@ -16,6 +16,7 @@
 #include <boost/beast/core/multi_buffer.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/serializer.hpp>
+#include <boost/beast/http/type_traits.hpp>
 #include <boost/beast/http/detail/chunk_encode.hpp>
 #include <boost/beast/core/error.hpp>
 #include <boost/beast/core/string.hpp>
@@ -427,6 +428,9 @@ async_write(
     `write_some` function. The algorithm will use a temporary @ref serializer
     with an empty chunk decorator to produce buffers.
 
+    @note This function only participates in overload resolution
+    if @ref is_mutable_body_writer for @b Body returns `true`.
+
     @param stream The stream to which the data is to be written.
     The type must support the @b SyncWriteStream concept.
 
@@ -441,7 +445,54 @@ async_write(
 template<
     class SyncWriteStream,
     bool isRequest, class Body, class Fields>
+#if BOOST_BEAST_DOXYGEN
 std::size_t
+#else
+typename std::enable_if<
+    is_mutable_body_writer<Body>::value,
+    std::size_t>::type
+#endif
+write(
+    SyncWriteStream& stream,
+    message<isRequest, Body, Fields>& msg);
+
+/** Write a complete message to a stream.
+
+    This function is used to write a complete message to a stream using
+    HTTP/1. The call will block until one of the following conditions is true:
+
+    @li The entire message is written.
+
+    @li An error occurs.
+
+    This operation is implemented in terms of one or more calls to the stream's
+    `write_some` function. The algorithm will use a temporary @ref serializer
+    with an empty chunk decorator to produce buffers.
+
+    @note This function only participates in overload resolution
+    if @ref is_mutable_body_writer for @b Body returns `true`.
+
+    @param stream The stream to which the data is to be written.
+    The type must support the @b SyncWriteStream concept.
+
+    @param msg The message to write.
+
+    @return The number of bytes written to the stream.
+
+    @throws system_error Thrown on failure.
+
+    @see @ref message
+*/
+template<
+    class SyncWriteStream,
+    bool isRequest, class Body, class Fields>
+#if BOOST_BEAST_DOXYGEN
+std::size_t
+#else
+typename std::enable_if<
+    ! is_mutable_body_writer<Body>::value,
+    std::size_t>::type
+#endif
 write(
     SyncWriteStream& stream,
     message<isRequest, Body, Fields> const& msg);
@@ -459,6 +510,9 @@ write(
     `write_some` function. The algorithm will use a temporary @ref serializer
     with an empty chunk decorator to produce buffers.
 
+    @note This function only participates in overload resolution
+    if @ref is_mutable_body_writer for @b Body returns `false`.
+
     @param stream The stream to which the data is to be written.
     The type must support the @b SyncWriteStream concept.
 
@@ -473,7 +527,55 @@ write(
 template<
     class SyncWriteStream,
     bool isRequest, class Body, class Fields>
+#if BOOST_BEAST_DOXYGEN
 std::size_t
+#else
+typename std::enable_if<
+    is_mutable_body_writer<Body>::value,
+    std::size_t>::type
+#endif
+write(
+    SyncWriteStream& stream,
+    message<isRequest, Body, Fields>& msg,
+    error_code& ec);
+
+/** Write a complete message to a stream.
+
+    This function is used to write a complete message to a stream using
+    HTTP/1. The call will block until one of the following conditions is true:
+
+    @li The entire message is written.
+
+    @li An error occurs.
+
+    This operation is implemented in terms of one or more calls to the stream's
+    `write_some` function. The algorithm will use a temporary @ref serializer
+    with an empty chunk decorator to produce buffers.
+
+    @note This function only participates in overload resolution
+    if @ref is_mutable_body_writer for @b Body returns `false`.
+
+    @param stream The stream to which the data is to be written.
+    The type must support the @b SyncWriteStream concept.
+
+    @param msg The message to write.
+
+    @param ec Set to the error, if any occurred.
+
+    @return The number of bytes written to the stream.
+
+    @see @ref message
+*/
+template<
+    class SyncWriteStream,
+    bool isRequest, class Body, class Fields>
+#if BOOST_BEAST_DOXYGEN
+std::size_t
+#else
+typename std::enable_if<
+    ! is_mutable_body_writer<Body>::value,
+    std::size_t>::type
+#endif
 write(
     SyncWriteStream& stream,
     message<isRequest, Body, Fields> const& msg,
