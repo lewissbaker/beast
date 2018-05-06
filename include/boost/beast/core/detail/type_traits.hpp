@@ -454,6 +454,71 @@ buffers_range(Buffers const& buffers)
     return buffers_range_adaptor<Buffers>{buffers};
 }
 
+/** Adaptor to present a DynamicStorage object as a DynamicBuffer
+*/
+template<class DynamicStorage>
+class dynamic_buffer_adaptor
+{
+    DynamicStorage& s_;
+
+public:
+    using const_buffers_type =
+        typename DynamicStorage::const_buffers_type;
+
+    using mutable_buffers_type =
+        typename DynamicStorage::mutable_buffers_type;
+
+    dynamic_buffer_adaptor(dynamic_buffer_adaptor&&) = default;
+
+    explicit
+    dynamic_buffer_adaptor(DynamicStorage& s)
+        : s_(s)
+    {
+    }
+
+    std::size_t
+    size() const
+    {
+        return s_.size();
+    }
+
+    std::size_t
+    max_size() const
+    {
+        return s_.max_size();
+    }
+
+    std::size_t
+    capacity() const
+    {
+        return s_.capacity();
+    }
+
+    const_buffers_type
+    data() const
+    {
+        return s_.data();
+    }
+
+    mutable_buffers_type
+    prepare(std::size_t n)
+    {
+        return s_.prepare(n);
+    }
+
+    void
+    commit(std::size_t n)
+    {
+        s_.commit(n);
+    }
+
+    void
+    consume(std::size_t n)
+    {
+        s_.consume(n);
+    }
+};
+
 /*  If this static assert goes off, it means that the completion
     handler you provided to an asynchronous initiating function did
     not have the right signature. Check the parameter types for your

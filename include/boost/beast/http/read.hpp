@@ -11,6 +11,7 @@
 #define BOOST_BEAST_HTTP_READ_HPP
 
 #include <boost/beast/core/detail/config.hpp>
+#include <boost/beast/core/detail/type_traits.hpp>
 #include <boost/beast/core/error.hpp>
 #include <boost/beast/http/basic_parser.hpp>
 #include <boost/beast/http/message.hpp>
@@ -70,6 +71,16 @@ template<
 std::size_t
 read_some(
     SyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    basic_parser<isRequest, Derived>& parser);
+
+template<
+    class SyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Derived>
+std::size_t
+read_some(
+    SyncReadStream& stream,
     DynamicBuffer& buffer,
     basic_parser<isRequest, Derived>& parser);
 
@@ -120,6 +131,17 @@ read_some(
 
     @return The number of bytes transferred to the parser.
 */
+template<
+    class SyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Derived>
+std::size_t
+read_some(
+    SyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    basic_parser<isRequest, Derived>& parser,
+    error_code& ec);
+
 template<
     class SyncReadStream,
     class DynamicBuffer,
@@ -201,6 +223,19 @@ BOOST_ASIO_INITFN_RESULT_TYPE(
     ReadHandler, void(error_code, std::size_t))
 async_read_some(
     AsyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    basic_parser<isRequest, Derived>& parser,
+    ReadHandler&& handler);
+
+template<
+    class AsyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Derived,
+    class ReadHandler>
+BOOST_ASIO_INITFN_RESULT_TYPE(
+    ReadHandler, void(error_code, std::size_t))
+async_read_some(
+    AsyncReadStream& stream,
     DynamicBuffer& buffer,
     basic_parser<isRequest, Derived>& parser,
     ReadHandler&& handler);
@@ -259,6 +294,16 @@ template<
 std::size_t
 read_header(
     SyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    basic_parser<isRequest, Derived>& parser);
+
+template<
+    class SyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Derived>
+std::size_t
+read_header(
+    SyncReadStream& stream,
     DynamicBuffer& buffer,
     basic_parser<isRequest, Derived>& parser);
 
@@ -307,6 +352,17 @@ read_header(
     @note The implementation will call @ref basic_parser::eager
     with the value `false` on the parser passed in.
 */
+template<
+    class SyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Derived>
+std::size_t
+read_header(
+    SyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    basic_parser<isRequest, Derived>& parser,
+    error_code& ec);
+
 template<
     class SyncReadStream,
     class DynamicBuffer,
@@ -385,6 +441,19 @@ BOOST_ASIO_INITFN_RESULT_TYPE(
     ReadHandler, void(error_code, std::size_t))
 async_read_header(
     AsyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    basic_parser<isRequest, Derived>& parser,
+    ReadHandler&& handler);
+
+template<
+    class AsyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Derived,
+    class ReadHandler>
+BOOST_ASIO_INITFN_RESULT_TYPE(
+    ReadHandler, void(error_code, std::size_t))
+async_read_header(
+    AsyncReadStream& stream,
     DynamicBuffer& buffer,
     basic_parser<isRequest, Derived>& parser,
     ReadHandler&& handler);
@@ -443,6 +512,16 @@ template<
 std::size_t
 read(
     SyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    basic_parser<isRequest, Derived>& parser);
+
+template<
+    class SyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Derived>
+std::size_t
+read(
+    SyncReadStream& stream,
     DynamicBuffer& buffer,
     basic_parser<isRequest, Derived>& parser);
 
@@ -491,6 +570,17 @@ read(
     @note The implementation will call @ref basic_parser::eager
     with the value `true` on the parser passed in.
 */
+template<
+    class SyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Derived>
+std::size_t
+read(
+    SyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    basic_parser<isRequest, Derived>& parser,
+    error_code& ec);
+
 template<
     class SyncReadStream,
     class DynamicBuffer,
@@ -569,6 +659,19 @@ BOOST_ASIO_INITFN_RESULT_TYPE(
     ReadHandler, void(error_code, std::size_t))
 async_read(
     AsyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    basic_parser<isRequest, Derived>& parser,
+    ReadHandler&& handler);
+
+template<
+    class AsyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Derived,
+    class ReadHandler>
+BOOST_ASIO_INITFN_RESULT_TYPE(
+    ReadHandler, void(error_code, std::size_t))
+async_read(
+    AsyncReadStream& stream,
     DynamicBuffer& buffer,
     basic_parser<isRequest, Derived>& parser,
     ReadHandler&& handler);
@@ -626,6 +729,16 @@ template<
 std::size_t
 read(
     SyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    message<isRequest, Body, basic_fields<Allocator>>& msg);
+
+template<
+    class SyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Body, class Allocator>
+std::size_t
+read(
+    SyncReadStream& stream,
     DynamicBuffer& buffer,
     message<isRequest, Body, basic_fields<Allocator>>& msg);
 
@@ -673,6 +786,17 @@ read(
 
     @return The number of bytes transferred to the parser.
 */
+template<
+    class SyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Body, class Allocator>
+std::size_t
+read(
+    SyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    message<isRequest, Body, basic_fields<Allocator>>& msg,
+    error_code& ec);
+
 template<
     class SyncReadStream,
     class DynamicBuffer,
@@ -743,6 +867,19 @@ read(
     this function. Invocation of the handler will be performed in a
     manner equivalent to using `boost::asio::io_context::post`.
 */
+template<
+    class AsyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Body, class Allocator,
+    class ReadHandler>
+BOOST_ASIO_INITFN_RESULT_TYPE(
+    ReadHandler, void(error_code, std::size_t))
+async_read(
+    AsyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    message<isRequest, Body, basic_fields<Allocator>>& msg,
+    ReadHandler&& handler);
+
 template<
     class AsyncReadStream,
     class DynamicBuffer,

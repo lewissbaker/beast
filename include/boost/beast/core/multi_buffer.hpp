@@ -13,6 +13,7 @@
 #include <boost/beast/core/detail/config.hpp>
 #include <boost/beast/core/detail/allocator.hpp>
 #include <boost/beast/core/detail/empty_base_optimization.hpp>
+#include <boost/beast/core/detail/type_traits.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/intrusive/list.hpp>
 #include <iterator>
@@ -265,6 +266,7 @@ public:
     void
     consume(size_type n);
 
+    /// Exchange two multi buffers
     template<class Alloc>
     friend
     void
@@ -313,6 +315,15 @@ private:
 
 /// A typical multi buffer
 using multi_buffer = basic_multi_buffer<std::allocator<char>>;
+
+/** Return a DynamicBuffer representing a dynamic storage container
+*/
+template<class Allocator>
+detail::dynamic_buffer_adaptor<basic_multi_buffer<Allocator>>
+dynamic_buffer(basic_multi_buffer<Allocator>& buffer)
+{
+    return detail::dynamic_buffer_adaptor<basic_multi_buffer<Allocator>>{buffer};
+}
 
 } // beast
 } // boost

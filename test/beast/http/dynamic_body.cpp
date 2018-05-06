@@ -11,6 +11,7 @@
 #include <boost/beast/http/dynamic_body.hpp>
 
 #include <boost/beast/core/buffers_to_string.hpp>
+#include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/core/ostream.hpp>
 #include <boost/beast/http/fields.hpp>
 #include <boost/beast/http/parser.hpp>
@@ -49,7 +50,7 @@ public:
             "xyz";
         test::stream ts(ioc_, s);
         response_parser<dynamic_body> p;
-        multi_buffer b;
+        flat_buffer b;
         read(ts, b, p);
         auto const& m = p.get();
         BEAST_EXPECT(buffers_to_string(m.body().data()) == "xyz");

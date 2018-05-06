@@ -46,7 +46,7 @@ class read_some_op
     Stream& s_;
     boost::asio::executor_work_guard<decltype(
         std::declval<Stream&>().get_executor())> wg_;
-    DynamicBuffer& b_;
+    DynamicBuffer b_;
     basic_parser<isRequest, Derived>& p_;
     std::size_t bytes_transferred_ = 0;
     Handler h_;
@@ -56,12 +56,15 @@ public:
     read_some_op(read_some_op&&) = default;
     read_some_op(read_some_op const&) = delete;
 
-    template<class DeducedHandler>
-    read_some_op(DeducedHandler&& h, Stream& s,
-        DynamicBuffer& b, basic_parser<isRequest, Derived>& p)
+    template<class DeducedHandler, class DeducedBuffer>
+    read_some_op(
+        DeducedHandler&& h,
+        Stream& s,
+        DeducedBuffer&& b,
+        basic_parser<isRequest, Derived>& p)
         : s_(s)
         , wg_(s_.get_executor())
-        , b_(b)
+        , b_(std::forward<DeducedBuffer>(b))
         , p_(p)
         , h_(std::forward<DeducedHandler>(h))
     {
@@ -487,7 +490,7 @@ template<
 std::size_t
 read_some(
     SyncReadStream& stream,
-    DynamicBuffer& buffer,
+    DynamicBuffer&& buffer_,
     basic_parser<isRequest, Derived>& parser,
     error_code& ec)
 {
@@ -497,6 +500,8 @@ read_some(
         boost::asio::is_dynamic_buffer<DynamicBuffer>::value,
         "DynamicBuffer requirements not met");
     BOOST_ASSERT(! parser.is_done());
+    typename std::decay<DynamicBuffer>::type buffer{
+        std::forward<DynamicBuffer>(buffer_)};
     std::size_t bytes_transferred = 0;
     if(buffer.size() == 0)
         goto do_read;
@@ -549,6 +554,61 @@ read_some(
 }
 
 template<
+    class SyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Derived>
+std::size_t
+read_some(
+    SyncReadStream& stream,
+    DynamicBuffer& buffer,
+    basic_parser<isRequest, Derived>& parser,
+    error_code& ec)
+{
+    static_assert(is_sync_read_stream<SyncReadStream>::value,
+        "SyncReadStream requirements not met");
+    static_assert(
+        boost::asio::is_dynamic_buffer<DynamicBuffer>::value,
+        "DynamicBuffer requirements not met");
+    BOOST_ASSERT(! parser.is_done());
+    return read_some(stream, dynamic_buffer(buffer), parser, ec);
+}
+
+template<
+    class AsyncReadStream,
+    class DynamicBuffer,
+    bool isRequest, class Derived,
+    class ReadHandler>
+BOOST_ASIO_INITFN_RESULT_TYPE(
+    ReadHandler, void(error_code, std::size_t))
+async_read_some(
+    AsyncReadStream& stream,
+    DynamicBuffer&& buffer,
+    basic_parser<isRequest, Derived>& parser,
+    ReadHandler&& handler)
+{
+    static_assert(is_async_read_stream<AsyncReadStream>::value,
+        "AsyncReadStream requirements not met");
+    static_assert(
+        boost::asio::is_dynamic_buffer<DynamicBuffer>::value,
+        "DynamicBuffer requirements not met");
+    BOOST_ASSERT(! parser.is_done());
+    BOOST_BEAST_HANDLER_INIT(
+        ReadHandler, void(error_code, std::size_t));
+    detail::read_some_op<
+        AsyncReadStream,
+        typename std::decay<DynamicBuffer>::type,
+        isRequest,
+        Derived,
+        BOOST_ASIO_HANDLER_TYPE(ReadHandler, void(error_code, std::size_t))>{
+            std::move(init.completion_handler),
+            stream,
+            std::forward<DynamicBuffer>(buffer),
+            parser}(
+                {}, 0, false);
+    return init.result.get();
+}
+
+template<
     class AsyncReadStream,
     class DynamicBuffer,
     bool isRequest, class Derived,
@@ -567,14 +627,8 @@ async_read_some(
         boost::asio::is_dynamic_buffer<DynamicBuffer>::value,
         "DynamicBuffer requirements not met");
     BOOST_ASSERT(! parser.is_done());
-    BOOST_BEAST_HANDLER_INIT(
-        ReadHandler, void(error_code, std::size_t));
-    detail::read_some_op<AsyncReadStream,
-        DynamicBuffer, isRequest, Derived, BOOST_ASIO_HANDLER_TYPE(
-            ReadHandler, void(error_code, std::size_t))>{
-                std::move(init.completion_handler), stream, buffer, parser}(
-                    {}, 0, false);
-    return init.result.get();
+    return async_read_some(stream, dynamic_buffer(buffer), parser,
+        std::forward<ReadHandler>(handler));
 }
 
 //------------------------------------------------------------------------------

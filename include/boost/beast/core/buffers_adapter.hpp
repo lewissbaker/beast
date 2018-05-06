@@ -156,6 +156,18 @@ public:
     consume(std::size_t n);
 };
 
+/** Return a DynamicBuffer representing a dynamic storage container
+*/
+template<class MutableBufferSequence>
+detail::dynamic_buffer_adaptor<
+    buffers_adapter<MutableBufferSequence>>
+dynamic_buffer(
+    buffers_adapter<MutableBufferSequence>& buffer)
+{
+    return detail::dynamic_buffer_adaptor<
+        buffers_adapter<MutableBufferSequence>>{buffer};
+}
+
 } // beast
 } // boost
 

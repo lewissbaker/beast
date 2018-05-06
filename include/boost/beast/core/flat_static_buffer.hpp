@@ -11,6 +11,7 @@
 #define BOOST_BEAST_FLAT_STATIC_BUFFER_HPP
 
 #include <boost/beast/core/detail/config.hpp>
+#include <boost/beast/core/detail/type_traits.hpp>
 #include <boost/asio/buffer.hpp>
 #include <algorithm>
 #include <cstddef>
@@ -245,6 +246,24 @@ public:
         return N;
     }
 };
+
+/** Return a DynamicBuffer representing a dynamic storage container
+*/
+inline
+detail::dynamic_buffer_adaptor<flat_static_buffer_base>
+dynamic_buffer(flat_static_buffer_base& buffer)
+{
+    return detail::dynamic_buffer_adaptor<flat_static_buffer_base>{buffer};
+}
+
+/** Return a DynamicBuffer representing a dynamic storage container
+*/
+template<std::size_t N>
+detail::dynamic_buffer_adaptor<flat_static_buffer<N>>
+dynamic_buffer(flat_static_buffer<N>& buffer)
+{
+    return detail::dynamic_buffer_adaptor<flat_static_buffer<N>>{buffer};
+}
 
 } // beast
 } // boost
