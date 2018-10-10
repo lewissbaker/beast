@@ -1,3 +1,9 @@
+Version 186:
+
+* Better flat_stream (experimental)
+
+--------------------------------------------------------------------------------
+
 Version 185:
 
 * Remove extraneous function

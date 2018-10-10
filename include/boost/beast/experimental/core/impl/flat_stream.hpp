@@ -7,15 +7,15 @@
 // Official repository: https://github.com/boostorg/beast
 //
 
-#ifndef BOOST_BEAST_CORE_IMPL_FLAT_STREAM_IPP
-#define BOOST_BEAST_CORE_IMPL_FLAT_STREAM_IPP
+#ifndef BOOST_BEAST_CORE_IMPL_FLAT_STREAM_HPP
+#define BOOST_BEAST_CORE_IMPL_FLAT_STREAM_HPP
 
 #include <boost/beast/core/buffers_prefix.hpp>
 #include <boost/beast/websocket/teardown.hpp>
 #include <boost/asio/associated_allocator.hpp>
 #include <boost/asio/associated_executor.hpp>
 #include <boost/asio/buffer.hpp>
-#include <boost/asio/coroutine.hpp>
+#include <boost/asio/handler_alloc_hook.hpp>
 #include <boost/asio/handler_continuation_hook.hpp>
 #include <boost/asio/handler_invoke_hook.hpp>
 
@@ -23,9 +23,8 @@ namespace boost {
 namespace beast {
 
 template<class NextLayer>
-template<class ConstBufferSequence, class Handler>
+template<class Handler>
 class flat_stream<NextLayer>::write_op
-    : public boost::asio::coroutine
 {
     using alloc_type = typename 
 #if defined(BOOST_NO_CXX11_ALLOCATOR)
@@ -55,7 +54,6 @@ class flat_stream<NextLayer>::write_op
     };
 
     flat_stream<NextLayer>& s_;
-    ConstBufferSequence b_;
     std::unique_ptr<char, deleter> p_;
     Handler h_;
 
@@ -63,10 +61,8 @@ public:
     template<class DeducedHandler>
     write_op(
         flat_stream<NextLayer>& s,
-        ConstBufferSequence const& b,
         DeducedHandler&& h)
         : s_(s)
-        , b_(b)
         , p_(nullptr, deleter{
             (boost::asio::get_associated_allocator)(h)})
         , h_(std::forward<DeducedHandler>(h))
@@ -92,17 +88,39 @@ public:
             h_, s_.get_executor());
     }
 
+    template<class ConstBufferSequence>
+    void
+    operator()(ConstBufferSequence const& buffers);
+
     void
     operator()(
         boost::system::error_code ec,
         std::size_t bytes_transferred);
 
     friend
+    void* asio_handler_allocate(
+        std::size_t size, write_op* op)
+    {
+        using boost::asio::asio_handler_allocate;
+        return asio_handler_allocate(
+            size, std::addressof(op->h_));
+    }
+
+    friend
+    void asio_handler_deallocate(
+        void* p, std::size_t size, write_op* op)
+    {
+        using boost::asio::asio_handler_deallocate;
+        asio_handler_deallocate(
+            p, size, std::addressof(op->h_));
+    }
+
+    friend
     bool asio_handler_is_continuation(write_op* op)
     {
         using boost::asio::asio_handler_is_continuation;
         return asio_handler_is_continuation(
-                std::addressof(op->h_));
+            std::addressof(op->h_));
     }
 
     template<class Function>
@@ -115,43 +133,50 @@ public:
 };
 
 template<class NextLayer>
-template<class ConstBufferSequence, class Handler>
+template<class Handler>
+template<class ConstBufferSequence>
 void
 flat_stream<NextLayer>::
-write_op<ConstBufferSequence, Handler>::
+write_op<Handler>::
+operator()(ConstBufferSequence const& buffers)
+{
+    auto const result = coalesce(buffers, coalesce_limit);
+    if(result.second)
+    {
+        p_.get_deleter().size = result.first;
+        p_.reset(p_.get_deleter().alloc.allocate(
+            p_.get_deleter().size));
+        boost::asio::buffer_copy(
+            boost::asio::buffer(
+                p_.get(), p_.get_deleter().size),
+            buffers, result.first);
+        s_.stream_.async_write_some(
+            boost::asio::buffer(
+                p_.get(), p_.get_deleter().size),
+                    std::move(*this));
+    }
+    else
+    {
+        s_.stream_.async_write_some(
+            boost::beast::buffers_prefix(
+                result.first, buffers),
+                    std::move(*this));
+    }
+}
+
+template<class NextLayer>
+template<class Handler>
+void
+flat_stream<NextLayer>::
+write_op<Handler>::
 operator()(
     error_code ec,
     std::size_t bytes_transferred)
 {
-    BOOST_ASIO_CORO_REENTER(*this)
-    {
-        BOOST_ASIO_CORO_YIELD
-        {
-            auto const result = coalesce(b_,  coalesce_limit);
-            if(result.second)
-            {
-                p_.get_deleter().size = result.first;
-                p_.reset(p_.get_deleter().alloc.allocate(
-                    p_.get_deleter().size));
-                boost::asio::buffer_copy(
-                    boost::asio::buffer(
-                        p_.get(), p_.get_deleter().size),
-                    b_, result.first);
-                s_.stream_.async_write_some(
-                    boost::asio::buffer(
-                        p_.get(), p_.get_deleter().size),
-                            std::move(*this));
-            }
-            else
-            {
-                s_.stream_.async_write_some(
-                    boost::beast::buffers_prefix(result.first, b_),
-                        std::move(*this));
-            }
-        }
-        p_.reset();
-        h_(ec, bytes_transferred);
-    }
+    // must deallocate before upcall
+    p_.reset();
+
+    h_(ec, bytes_transferred);
 }
 
 //------------------------------------------------------------------------------
@@ -225,10 +250,24 @@ write_some(ConstBufferSequence const& buffers)
     auto const result = coalesce(buffers, coalesce_limit);
     if(result.second)
     {
-        std::unique_ptr<char[]> p{new char[result.first]};
-        auto const b = boost::asio::buffer(p.get(), result.first);
-        boost::asio::buffer_copy(b, buffers);
-        return stream_.write_some(b);
+        if(result.first > stack_limit)
+        {
+            std::unique_ptr<char[]> p{new char[result.first]};
+            return stream_.write_some(
+                boost::asio::buffer(p.get(),
+                    boost::asio::buffer_copy(
+                        boost::asio::buffer(p.get(), result.first),
+                        buffers)));
+        }
+        else
+        {
+            char buf[stack_limit];
+            return stream_.write_some(
+                boost::asio::buffer(buf,
+                    boost::asio::buffer_copy(
+                        boost::asio::buffer(buf, stack_limit),
+                        buffers)));
+        }
     }
     return stream_.write_some(
         boost::beast::buffers_prefix(result.first, buffers));
@@ -248,10 +287,24 @@ write_some(ConstBufferSequence const& buffers, error_code& ec)
     auto const result = coalesce(buffers, coalesce_limit);
     if(result.second)
     {
-        std::unique_ptr<char[]> p{new char[result.first]};
-        auto const b = boost::asio::buffer(p.get(), result.first);
-        boost::asio::buffer_copy(b, buffers);
-        return stream_.write_some(b, ec);
+        if(result.first > stack_limit)
+        {
+            std::unique_ptr<char[]> p{new char[result.first]};
+            return stream_.write_some(
+                boost::asio::buffer(p.get(),
+                    boost::asio::buffer_copy(
+                        boost::asio::buffer(p.get(), result.first),
+                        buffers)), ec);
+        }
+        else
+        {
+            char buf[stack_limit];
+            return stream_.write_some(
+                boost::asio::buffer(buf,
+                    boost::asio::buffer_copy(
+                        boost::asio::buffer(buf, stack_limit),
+                        buffers)), ec);
+        }
     }
     return stream_.write_some(
         boost::beast::buffers_prefix(result.first, buffers), ec);
@@ -275,9 +328,9 @@ async_write_some(
         "ConstBufferSequence requirements not met");
     BOOST_BEAST_HANDLER_INIT(
         WriteHandler, void(error_code, std::size_t));
-    write_op<ConstBufferSequence, BOOST_ASIO_HANDLER_TYPE(
-        WriteHandler, void(error_code, std::size_t))>{
-            *this, buffers, std::move(init.completion_handler)}({}, 0);
+    write_op<BOOST_ASIO_HANDLER_TYPE(WriteHandler,
+        void(error_code, std::size_t))>(*this,
+            std::move(init.completion_handler))(buffers);
     return init.result.get();
 }
 

@@ -25,6 +25,10 @@ public:
     // 16KB is the upper limit on reasonably sized HTTP messages.
     static std::size_t constexpr coalesce_limit = 16 * 1024;
 
+    // Buffers this size or less will use the stack.
+    // This gives a small performance boost for synchronous writes.
+    static std::size_t constexpr stack_limit = 4 * 1024;
+
     // calculates the coalesce settings for a buffer sequence
     template<class BufferSequence>
     static

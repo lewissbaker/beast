@@ -84,11 +84,7 @@ class flat_stream
     : private detail::flat_stream_base
 #endif
 {
-    // Largest buffer size we will flatten.
-    // 16KB is the upper limit on reasonably sized HTTP messages.
-    static std::size_t constexpr max_size = 16 * 1024;
-
-    template<class, class> class write_op;
+    template<class> class write_op;
 
     NextLayer stream_;
 
@@ -349,6 +345,6 @@ public:
 } // beast
 } // boost
 
-#include <boost/beast/experimental/core/impl/flat_stream.ipp>
+#include <boost/beast/experimental/core/impl/flat_stream.hpp>
 
 #endif

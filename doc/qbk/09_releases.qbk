@@ -29,7 +29,9 @@
 
 * Workaround for http-server-fast and libstdc++
 
+[*Improvements]
 
+* Better flat_stream (experimental)
 
 
 [heading Boost 1.68]
