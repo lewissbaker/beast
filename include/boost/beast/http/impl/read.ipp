@@ -18,6 +18,7 @@
 #include <boost/beast/core/handler_ptr.hpp>
 #include <boost/beast/core/read_size.hpp>
 #include <boost/beast/core/type_traits.hpp>
+#include <boost/beast/core/detail/buffer.hpp>
 #include <boost/asio/associated_allocator.hpp>
 #include <boost/asio/associated_executor.hpp>
 #include <boost/asio/coroutine.hpp>
@@ -121,8 +122,6 @@ operator()(
     bool cont)
 {
     cont_ = cont;
-    boost::optional<typename
-        DynamicBuffer::mutable_buffers_type> mb;
     BOOST_ASIO_CORO_REENTER(*this)
     {
         if(b_.size() == 0)
@@ -139,18 +138,15 @@ operator()(
                 break;
 
         do_read:
-            try
-            {
-                mb.emplace(b_.prepare(
-                    read_size_or_throw(b_, 65536)));
-            }
-            catch(std::length_error const&)
-            {
-                ec = error::buffer_overflow;
-                break;
-            }
             BOOST_ASIO_CORO_YIELD
-            s_.async_read_some(*mb, std::move(*this));
+            {
+                auto mb = beast::detail::dynamic_buffer_prepare(
+                    b_, read_size_or_throw(b_, 65536), ec,
+                        error::buffer_overflow);
+                if(ec)
+                    break;
+                s_.async_read_some(*mb, std::move(*this));
+            }
             if(ec == boost::asio::error::eof)
             {
                 BOOST_ASSERT(bytes_transferred == 0);
