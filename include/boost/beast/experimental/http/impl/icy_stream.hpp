@@ -7,8 +7,8 @@
 // Official repository: https://github.com/boostorg/beast
 //
 
-#ifndef BOOST_BEAST_CORE_IMPL_ICY_STREAM_IPP
-#define BOOST_BEAST_CORE_IMPL_ICY_STREAM_IPP
+#ifndef BOOST_BEAST_CORE_IMPL_ICY_STREAM_HPP
+#define BOOST_BEAST_CORE_IMPL_ICY_STREAM_HPP
 
 #include <boost/beast/core/bind_handler.hpp>
 #include <boost/beast/core/buffers_adapter.hpp>
@@ -259,6 +259,32 @@ public:
     operator()(
         boost::system::error_code ec,
         std::size_t bytes_transferred);
+
+    friend
+    bool asio_handler_is_continuation(read_op* op)
+    {
+        using boost::asio::asio_handler_is_continuation;
+        return asio_handler_is_continuation(
+            std::addressof(op->d_.handler()));
+    }
+
+    friend
+    void* asio_handler_allocate(
+        std::size_t size, read_op* op)
+    {
+        using boost::asio::asio_handler_allocate;
+        return asio_handler_allocate(
+            size, std::addressof(op->d_.handler()));
+    }
+
+    friend
+    void asio_handler_deallocate(
+        void* p, std::size_t size, read_op* op)
+    {
+        using boost::asio::asio_handler_deallocate;
+        asio_handler_deallocate(
+            p, size, std::addressof(op->d_.handler()));
+    }
 
     template<class Function>
     friend

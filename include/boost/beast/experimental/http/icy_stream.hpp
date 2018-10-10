@@ -340,6 +340,6 @@ public:
 } // beast
 } // boost
 
-#include <boost/beast/experimental/http/impl/icy_stream.ipp>
+#include <boost/beast/experimental/http/impl/icy_stream.hpp>
 
 #endif
