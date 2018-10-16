@@ -14,6 +14,51 @@
 #include <memory>
 #include <utility>
 
+/** Read a line and echo it back.
+
+    This function is used to read a line ending in a carriage-return
+    ("CR") from the stream, and then write it back. The function call
+    blocks until one of the following conditions is true:
+
+    @li A line was read in and sent back on the stream
+
+    @li An error occurs.
+
+    The implementation may read additional octets that lie past
+    the end of the line being read. These octets are silently
+    discarded.
+
+    @param The stream to operate on. The type must meet the
+    requirements of @b AsyncReadStream and @AsyncWriteStream
+
+    @param ec Set to the error, if any occurred.
+*/
+template<class SyncStream>
+void
+echo(SyncStream& stream, boost::beast::error_code& ec);
+
+template<class SyncStream>
+void
+echo(SyncStream& stream, boost::beast::error_code& ec)
+{
+    // This dynamic buffer will be used to hold the line of text
+    boost::asio::streambuf buffer;
+
+    // Read a line of text from the stream into the buffer
+    auto const bytes_matched = boost::asio::read_until(stream, buffer, "\r", ec);
+    if(ec)
+        return;
+
+    // Now echo the text. Since we could have read past the carriage
+    // return, we use buffer_prefix to send only the text up to and
+    // including the carriage return.
+    boost::asio::write(stream, boost::beast::buffers_prefix(bytes_matched, buffer.data()), ec);
+    if(ec)
+        return;
+
+    // If we get here then there was no error
+}
+
 //[example_core_echo_op_1
 
 template<
