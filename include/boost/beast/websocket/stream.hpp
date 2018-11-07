@@ -473,7 +473,7 @@ public:
     void
     get_option(permessage_deflate& o)
     {
-        get_option(o, is_deflate_supported{});
+        this->get_option_impl(o);
     }
 
     /** Set the automatic fragmentation option.
@@ -3374,45 +3374,10 @@ private:
     static void default_decorate_req(request_type&) {}
     static void default_decorate_res(response_type&) {}
 
-    void
-    set_option(permessage_deflate const& o, std::true_type);
-
-    void
-    set_option(permessage_deflate const&, std::false_type);
-
-    void
-    get_option(permessage_deflate& o, std::true_type)
-    {
-        o = this->pmd_opts_;
-    }
-
-    void
-    get_option(permessage_deflate& o, std::false_type)
-    {
-        o = {};
-        o.client_enable = false;
-        o.server_enable = false;
-    }
-
     void open(role_type role);
-
-    void open_pmd(std::true_type);
-
-    void open_pmd(std::false_type)
-    {
-    }
 
     void close();
 
-    void close_pmd(std::true_type)
-    {
-        this->pmd_.reset();
-    }
-
-    void close_pmd(std::false_type)
-    {
-    }
-    
     void reset();
 
     void begin_msg()

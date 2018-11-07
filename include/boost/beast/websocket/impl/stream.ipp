@@ -95,45 +95,7 @@ open(role_type role)
     wr_cont_ = false;
     wr_buf_size_ = 0;
 
-    open_pmd(is_deflate_supported{});
-}
-
-template<class NextLayer, bool deflateSupported>
-inline
-void
-stream<NextLayer, deflateSupported>::
-open_pmd(std::true_type)
-{
-    if(((role_ == role_type::client &&
-            this->pmd_opts_.client_enable) ||
-        (role_ == role_type::server &&
-            this->pmd_opts_.server_enable)) &&
-        this->pmd_config_.accept)
-    {
-        pmd_normalize(this->pmd_config_);
-        this->pmd_.reset(new typename
-            detail::stream_base<deflateSupported>::pmd_type);
-        if(role_ == role_type::client)
-        {
-            this->pmd_->zi.reset(
-                this->pmd_config_.server_max_window_bits);
-            this->pmd_->zo.reset(
-                this->pmd_opts_.compLevel,
-                this->pmd_config_.client_max_window_bits,
-                this->pmd_opts_.memLevel,
-                zlib::Strategy::normal);
-        }
-        else
-        {
-            this->pmd_->zi.reset(
-                this->pmd_config_.client_max_window_bits);
-            this->pmd_->zo.reset(
-                this->pmd_opts_.compLevel,
-                this->pmd_config_.server_max_window_bits,
-                this->pmd_opts_.memLevel,
-                zlib::Strategy::normal);
-        }
-    }
+    this->open_pmd(role);
 }
 
 template<class NextLayer, bool deflateSupported>
@@ -142,7 +104,7 @@ stream<NextLayer, deflateSupported>::
 close()
 {
     wr_buf_.reset();
-    close_pmd(is_deflate_supported{});
+    this->close_pmd();
 }
 
 template<class NextLayer, bool deflateSupported>

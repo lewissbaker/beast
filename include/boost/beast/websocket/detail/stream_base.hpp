@@ -336,6 +336,53 @@ struct stream_base : stream_prng
         this->pmd_opts_ = o;
     }
 
+    void
+    get_option_impl(permessage_deflate& o)
+    {
+        o = this->pmd_opts_;
+    }
+
+    void
+    open_pmd(role_type role)
+    {
+        if(((role == role_type::client &&
+                this->pmd_opts_.client_enable) ||
+            (role == role_type::server &&
+                this->pmd_opts_.server_enable)) &&
+            this->pmd_config_.accept)
+        {
+            pmd_normalize(this->pmd_config_);
+            this->pmd_.reset(new typename
+                detail::stream_base<deflateSupported>::pmd_type);
+            if(role == role_type::client)
+            {
+                this->pmd_->zi.reset(
+                    this->pmd_config_.server_max_window_bits);
+                this->pmd_->zo.reset(
+                    this->pmd_opts_.compLevel,
+                    this->pmd_config_.client_max_window_bits,
+                    this->pmd_opts_.memLevel,
+                    zlib::Strategy::normal);
+            }
+            else
+            {
+                this->pmd_->zi.reset(
+                    this->pmd_config_.client_max_window_bits);
+                this->pmd_->zo.reset(
+                    this->pmd_opts_.compLevel,
+                    this->pmd_config_.server_max_window_bits,
+                    this->pmd_opts_.memLevel,
+                    zlib::Strategy::normal);
+            }
+        }
+    }
+
+    void
+    close_pmd()
+    {
+        this->pmd_.reset();
+    }
+
     // return `true` if current message is deflated
     bool
     rd_deflated() const
@@ -384,6 +431,8 @@ struct stream_base<false> : stream_prng
     // These stubs are for avoiding linking in the zlib
     // code when permessage-deflate is not enabled.
 
+    void* pmd_ = nullptr; // VFALCO A hack, but works
+
     void
     set_option_impl(permessage_deflate const& o)
     {
@@ -395,6 +444,24 @@ struct stream_base<false> : stream_prng
             BOOST_THROW_EXCEPTION(std::invalid_argument{
                 "deflateSupported == false"});
         }
+    }
+
+    void
+    get_option_impl(permessage_deflate& o)
+    {
+        o = {};
+        o.client_enable = false;
+        o.server_enable = false;
+    }
+
+    void
+    open_pmd(role_type)
+    {
+    }
+
+    void
+    close_pmd()
+    {
     }
 
     bool
