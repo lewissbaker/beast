@@ -314,6 +314,28 @@ struct stream_base : stream_prng
     permessage_deflate          pmd_opts_;      // local pmd options
     detail::pmd_offer           pmd_config_;    // offer (client) or negotiation (server)
 
+    void
+    set_option_impl(permessage_deflate const& o)
+    {
+        if( o.server_max_window_bits > 15 ||
+            o.server_max_window_bits < 9)
+            BOOST_THROW_EXCEPTION(std::invalid_argument{
+                "invalid server_max_window_bits"});
+        if( o.client_max_window_bits > 15 ||
+            o.client_max_window_bits < 9)
+            BOOST_THROW_EXCEPTION(std::invalid_argument{
+                "invalid client_max_window_bits"});
+        if( o.compLevel < 0 ||
+            o.compLevel > 9)
+            BOOST_THROW_EXCEPTION(std::invalid_argument{
+                "invalid compLevel"});
+        if( o.memLevel < 1 ||
+            o.memLevel > 9)
+            BOOST_THROW_EXCEPTION(std::invalid_argument{
+                "invalid memLevel"});
+        this->pmd_opts_ = o;
+    }
+
     // return `true` if current message is deflated
     bool
     rd_deflated() const
@@ -361,6 +383,19 @@ struct stream_base<false> : stream_prng
 {
     // These stubs are for avoiding linking in the zlib
     // code when permessage-deflate is not enabled.
+
+    void
+    set_option_impl(permessage_deflate const& o)
+    {
+        if(o.client_enable || o.server_enable)
+        {
+            // Can't enable permessage-deflate
+            // when deflateSupported == false.
+            //
+            BOOST_THROW_EXCEPTION(std::invalid_argument{
+                "deflateSupported == false"});
+        }
+    }
 
     bool
     rd_deflated() const

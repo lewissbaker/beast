@@ -72,45 +72,6 @@ read_size_hint(DynamicBuffer& buffer) const
 template<class NextLayer, bool deflateSupported>
 void
 stream<NextLayer, deflateSupported>::
-set_option(permessage_deflate const& o, std::true_type)
-{
-    if( o.server_max_window_bits > 15 ||
-        o.server_max_window_bits < 9)
-        BOOST_THROW_EXCEPTION(std::invalid_argument{
-            "invalid server_max_window_bits"});
-    if( o.client_max_window_bits > 15 ||
-        o.client_max_window_bits < 9)
-        BOOST_THROW_EXCEPTION(std::invalid_argument{
-            "invalid client_max_window_bits"});
-    if( o.compLevel < 0 ||
-        o.compLevel > 9)
-        BOOST_THROW_EXCEPTION(std::invalid_argument{
-            "invalid compLevel"});
-    if( o.memLevel < 1 ||
-        o.memLevel > 9)
-        BOOST_THROW_EXCEPTION(std::invalid_argument{
-            "invalid memLevel"});
-    this->pmd_opts_ = o;
-}
-
-template<class NextLayer, bool deflateSupported>
-void
-stream<NextLayer, deflateSupported>::
-set_option(permessage_deflate const& o, std::false_type)
-{
-    if(o.client_enable || o.server_enable)
-    {
-        // Can't enable permessage-deflate
-        // when deflateSupported == false.
-        //
-        BOOST_THROW_EXCEPTION(std::invalid_argument{
-            "deflateSupported == false"});
-        }
-}
-
-template<class NextLayer, bool deflateSupported>
-void
-stream<NextLayer, deflateSupported>::
 open(role_type role)
 {
     // VFALCO TODO analyze and remove dupe code in reset()

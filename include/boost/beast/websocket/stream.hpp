@@ -466,7 +466,7 @@ public:
     void
     set_option(permessage_deflate const& o)
     {
-        set_option(o, is_deflate_supported{});
+        this->set_option_impl(o);
     }
 
     /// Get the permessage-deflate extension options
