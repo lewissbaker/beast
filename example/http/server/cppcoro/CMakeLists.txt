@@ -9,7 +9,7 @@
 
 GroupSources(include/boost/beast beast)
 GroupSources(example/http/server/cppcoro "/")
-GroupSources(cppcoro/include/ "cppcoro")
+GroupSources(cppcoro/include/cppcoro "cppcoro")
 GroupSources(cppcoro/lib/ "cppcoro-src")
 
 file (GLOB_RECURSE CPPCORO_HEADERS
