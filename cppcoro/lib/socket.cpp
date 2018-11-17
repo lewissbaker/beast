@@ -288,7 +288,7 @@ void cppcoro::net::socket::bind(const ip_endpoint& localEndPoint)
 		SOCKADDR_IN& ipv4Sockaddr = *reinterpret_cast<SOCKADDR_IN*>(sockaddr);
 		ipv4Sockaddr.sin_family = AF_INET;
 		std::memcpy(&ipv4Sockaddr.sin_addr, localEndPoint.to_ipv4().address().bytes(), 4);
-		ipv4Sockaddr.sin_port = localEndPoint.to_ipv4().port();
+		ipv4Sockaddr.sin_port = htons(localEndPoint.to_ipv4().port());
 	}
 	else
 	{
